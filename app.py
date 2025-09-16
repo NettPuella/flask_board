@@ -1,6 +1,7 @@
 # Flask 웹 프레임워크, 문자열 템플릿, 폼처리, 리다이렉트를 사용
 from flask import Flask, render_template_string, request, redirect, url_for
 import json # 줄바꿈/특수문자 포함 본문을 안전하게 파일에 저장하기 위해 사용(JSON Lines)
+from datetime import datetime # ✅ 댓글 작성 시각 기록용 import
 
 # Flask 앱 객체 생성
 app = Flask(__name__)
@@ -8,17 +9,35 @@ app = Flask(__name__)
 # 글을 저장할 파일 경로
 FILE_PATH = 'posts.txt'
 
+# 💜 파일 I/O 유틸(JSON Lines)
+def _normalize_post(obj):
+    # JSON/구형라인을 표준 포맷으로 변환
+    title = obj.get('title', '')
+    content = obj.get('content', '')
+    # comments는 선택적. 없으면 빈 리스트.
+    comments = obj.get('comments',[])
+    # 댓글 항목은 dict(text, create_at) 형태로 정규화
+    norm_comments = []
+    for c in comments:
+        if isinstance(c, dict) and 'text' in c:
+            norm_comments.append({
+                'text': c['text'],
+                'created_at': c.get('created_at', '')
+            })
+        elif isinstance(c, str):
+            norm_comments.append({'text': c, 'created_at': ''})
+    return{'title': title, 'content': content, 'comments': norm_comments}
+
 # 💜함수: 글 목록 불러오기(제목 + 내용)
 def load_posts():
     # post.txt를 한 줄씩 읽어서 JSON으로 파싱해서 [{'title':..., 'content':...},...] 형태로 반환
     # 📌 하위호환: 
-    # - 과거 사용하였던 '제목|||내용' 혁ㅅㄱ의 라인도 자동 인식하여 읽어옴
+    # - 과거 사용하였던 '제목|||내용' 형식의 라인도 자동 인식하여 comments=[]로 읽어옴
     # - 이후 수정/삭제/새 글 작성 시엔 JSONL로 저장됨.
     try:
         #파일을 읽고 줄마다 리스트로 만들어서 반환
         posts = []
         with open(FILE_PATH, 'r', encoding='utf-8') as f:
-            posts = []
             for raw in f:
                 line = raw.strip()
                 if not line:
@@ -27,17 +46,17 @@ def load_posts():
                 # 1) 우선 JSONL 시도
                 try:
                     obj = json.loads(line)
-                    if isinstance(obj, dict) and 'title' in obj and 'content' in obj:
-                        posts.append({'title': obj['title'], 'content': obj['content']})
+                    if isinstance(obj, dict):
+                        posts.append(_normalize_post(obj))
                         continue
                 except json.JSONDecodeError:
                     pass
                 
-                # 2) 구형 '제목|||내용' 포멧 fallback (처음 구분자만 분리)
+                # 2) 구형 '제목|||내용' 포멧 (처음 구분자만 분리)
                 parts = line.split('|||', 1)
                 if len(parts) == 2:
                     title, content = parts
-                    posts.append({'title': title, 'content': content})
+                    posts.append({'title': title, 'content': content, 'comments':[]})
             return posts
     except FileNotFoundError:
         # 파일이 없으면 빈 리스트 반환
@@ -49,12 +68,13 @@ def load_posts():
 
 # 💜함수: 글 추가 저장하기
 def save_post(title, content):
-    # 새 글 한건을 JSON 한 줄로 저장.
+    # 새 글 한건을 JSON 한 줄로 저장. (줄바꿈/이모지 안전)
     # - ensure_ascii=False: 한글이 \uXXXX로 꺠지지 않게 
     # - 내용 안의 줄바꿈은 팔일에 \n으로 안전하게 기록됨
+    obj = {'title': title, 'content': content, 'comments': []}
     with open(FILE_PATH, 'a', encoding='utf-8') as f:
         # f.write(f"{title}|||{content}\n") 하단의 JSON 코드로 변경
-        f.write(json.dumps({'title': title, 'content': content}, ensure_ascii=False) + '\n')
+        f.write(json.dumps(obj, ensure_ascii=False) + '\n')
 # ✅ 'a' 모드: 파일 끝에 내용을 "추가"
 # ✅  write(): 글 내용 + 줄바꿈 저장
 
@@ -63,7 +83,24 @@ def save_all_posts(posts):
     with open(FILE_PATH, 'w', encoding='utf-8') as f:
         for p in posts:
             # f.write(f"{p['title']}|||{p['content']}\n") 하단의 JSON 코드로 변경
-            f.write(json.dumps({'title': p['title'], 'content': p['content']}, ensure_ascii=False) + '\n')
+            f.write(json.dumps({
+                'title': p['title'], 
+                'content': p['content'],
+                'comments': p.get('comments', [])
+                }, ensure_ascii=False) + '\n')
+
+def add_comment(index, text):
+    #index번째 그레 댓글 추가, 성공 시 True
+    posts = load_posts()
+    if 0 <= index < len(posts) and text:
+        posts[index].setdefault('comments', [])
+        posts[index]['comments'].append({
+            'text': text,
+            'created_at': datetime.now().isoformat(timespec='seconds')
+        })
+        save_all_posts(posts)
+        return True
+    return False
 
 # 홈 주소 / -> 게시판으로 리다이렉트
 @app.route('/')
