@@ -89,8 +89,9 @@ def save_all_posts(posts):
                 'comments': p.get('comments', [])
                 }, ensure_ascii=False) + '\n')
 
+# 💜 댓글 추가
 def add_comment(index, text):
-    #index번째 그레 댓글 추가, 성공 시 True
+    #index번째 글에 댓글 추가, 성공 시 True
     posts = load_posts()
     if 0 <= index < len(posts) and text:
         posts[index].setdefault('comments', [])
@@ -101,6 +102,16 @@ def add_comment(index, text):
         save_all_posts(posts)
         return True
     return False
+
+# 💜 댓글 삭제
+def delete_comment(index, cidx):
+    posts = load_posts()
+    if 0 <= index < len(posts):
+        comments = posts[index].get('comments', [])
+        if 0 <= cidx < len(comments):
+            del comments[cidx]
+            save_all_posts(posts)
+    return True
 
 # 홈 주소 / -> 게시판으로 리다이렉트
 @app.route('/')
@@ -114,11 +125,14 @@ def board():
     posts = load_posts() # 파일에서 글 목록 불러오기
     return render_template_string('''
         <h2>📝 나의 게시판</h2>
-        <a href = "/create">글쓰기</a>
+        <a href = {{ url_for('create') }}>글쓰기</a>
         <ul>
         {% for post in posts %}
             <li>
-                <a href="/detail/{{ loop.index0 }}">{{ post.title }}</a>
+                <a href="{{ url_for('detail', index=loop.index0) }}">{{ post.title }}</a>
+                <small style = "color:#888;">
+                    (댓글 {{ post.comments|length if post.comments is defined else 0 }})
+                </small>
             </li> 
         {% endfor %}
         </ul>                                  
@@ -138,7 +152,7 @@ def create():
         save_post(title, content) # 파일에 저장
         return redirect(url_for('board')) # 목록으로 이동
     
-    # GET 요청: 글쓰기 폼 보여줌
+    # GET 요청: 글쓰기 폼 보여줌, 템플릿 안 따옴표 이슈를 피하려면 url_for 결과를 변수로 내려도 됨(선택)
     return render_template_string(''' 
         <h2>✏️ 글 작성</h2>
         <form method="post">
@@ -147,8 +161,8 @@ def create():
             <textarea name="content" rows="8" cols="70" required></textarea><br>
             <button type="submit">저장</button>
         </form>
-        <a href="{{board_url}}">목록으로</a>   
-    ''', board_url=url_for('board'))
+        <a href="{{ url_for('board') }}">목록으로</a>   
+    ''')
 # ✅ request.method: GET인지 POST인지 확인
 # ✅ request.form['content']: 사용자가 입력한 내용
 
@@ -166,14 +180,44 @@ def detail(index):
                           
             <div style="display:flex; gap:10px; margin-top: 10px;">
                 <a href="{{ url_for('edit', index=index) }}">
-                <button type="button">✏️수정</button></a>
+                    <button type="button">✏️수정</button></a>
                 <!-- 🔹삭제는 POST로 안전하게 -->
-                <form method="post" action="{{ url_for('delete', index=index) }}" onsubmit="return confirm('정말 삭제할까요?');">
+                <form method="post" action="{{ url_for('delete', index=index) }}" 
+                    onsubmit="return confirm('정말 삭제할까요?');">
                     <button type="submit" style="background:#ff4d4f; color:white;">❌삭제</button>
                 </form>
             </div>
+                                      
+            <hr>  
+            <h3> 💬 댓글({{ post.comments|length if post.comments is disfined else 0 }}) </h3>
+            <ul>
+                {% for c in post.coments %}
+                    <li style="margin-bottom:px;">
+                        <div>{{ c.text }}</div>
+                        {% if c.created_at %}
+                            <small style="color:#888;">{{created_at}}</small>
+                        {% endif %}
+                        <!-- 댓글 삭제 버튼(옵션) -->
+                        <form method="post"
+                            action="{{ url_for('delete_comment_route', index=index, cidx=loop.index0) }}"
+                             style="display:inline"
+                             onsubmit="return confirm('댓글을 삭제할까요?');">    
+                            <button type="submit" style="border:none;background:none;color:#c00;cursor:pointer;">
+                                삭제
+                            </botton>               
+                        </form>
+                    </li>
+                < % else % >
+                    <li style="color:#888;">첫 댓글을 남겨보세요!</li>
+                { % endfor % }              
+            </ul>
             
-            <p><a href = "/board">목록으로</a></p>
+            <form method="post" action="{{ url_for('add_comment_route', index=index) }}">
+                <textarea name="comment" rows="3" cols="70" required placeholder="댓글을 입력하세요"></textarea><br>
+                <button type="submit">댓글 등록</button>                                               
+            </form>
+            
+            <p><a href = {{ url_for('board') }}><-목록으로</a></p>
         ''', post=post, index=index)
     return "글이 존재하지 않습니다.", 404
 
@@ -187,12 +231,10 @@ def edit(index):
         return "글이 존재하지 않습니다", 404
     
     if request.method == 'POST':
-        posts[index] = {
-            'title': request.form['title'],
-            'content': request.form['content']
-        }
+        posts[index] ['title'] = request.form.get('title', '').strip()
+        posts[index]['content'] = request.form('conment', '')
         save_all_posts(posts)
-        return redirect(f'/detail/{index}')
+        return redirect(url_for('detail', index=index))
           
     
     # GET 요청: 기존 글 데이터 폼에 미리 채워서 보여줌
@@ -202,10 +244,10 @@ def edit(index):
         <form method = "post">
             제목: <input type="text" name="title" value="{{post.title}}" required><br><br>
             내용: <br>
-            <textarea name="content" rows="6" cols="60" required>{{ post.content }}</textarea><br>
+            <textarea name="content" rows="8" cols="70" required>{{ post.content }}</textarea><br>
             <button type="submit">수정 완료</button>
         </form>
-        <p><a href="/detail/{{ index }}">뒤로</a></p>  
+        <p><a href="{{ url_for('detail', index=index) }}">뒤로</a></p>  
     ''', post=post, index=index)
 
 # 💜❌ 글 삭제기능
@@ -216,7 +258,21 @@ def delete(index):
     if 0 <= index < len(posts):
         del posts[index]
         save_all_posts(posts)
-    return redirect('/board')
+    return redirect(url_for('board'))
+
+
+# 💜 댓글; 추가 삭제 라우트
+@app.route('/comment/<int:index>', methods=['post'])
+def add_comment_route(index):
+    text = request.form.get('comment', ''),strip()
+    if text:
+        add_comment(index, text)
+    return redirect( url_for('detail', index=index))
+
+@app.route('/comment/<int:index>/delete/<int:cidx>', methods=['POST'])
+def delete_comment_route(index,cidx):
+    delete_comment(index,cidx)
+    return redirect(url_for('detail', index=index))
 
 # 🖥️ 서버실행
 if __name__ ==  '__main__':
