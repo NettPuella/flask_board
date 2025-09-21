@@ -173,7 +173,11 @@ def detail(index):
     posts = load_posts()
     if 0 <= index < len(posts):
         post = posts[index]
+        comments = post.get('comments', []) # 파이썬에서 미리 준비(없으면 빈 리스트)
         return render_template_string('''
+            <!doctype html>
+            <title>상세</title>                          
+
             <h2>📝 {{ post.title }}</h2>
             <!-- 🔹pre + white-space:pre-wrap 으로 줄바꿈/공백을 그대로 표시 -->
             <pre style="white-space: pre-wrap; font-family:inherit;">{{ post.content }}</pre>
@@ -189,9 +193,9 @@ def detail(index):
             </div>
                                       
             <hr>  
-            <h3> 💬 댓글({{ post.comments|length if post.comments is disfined else 0 }}) </h3>
+            <h3> 💬 댓글 ({{ comments | length }}) </h3>
             <ul>
-                {% for c in post.coments %}
+                {% for c in comments %}
                     <li style="margin-bottom:6px;">
                         <div>{{ c.text }}</div>
                         {% if c.created_at %}
@@ -207,9 +211,9 @@ def detail(index):
                             </button>               
                         </form>
                     </li>
-                < % else % >
+                {% else %}
                     <li style="color:#888;">첫 댓글을 남겨보세요!</li>
-                { % endfor % }              
+                {% endfor %}              
             </ul>
             
             <form method="post" action="{{ url_for('add_comment_route', index=index) }}">
@@ -217,8 +221,8 @@ def detail(index):
                 <button type="submit">댓글 등록</button>                                               
             </form>
             
-            <p><a href = {{ url_for('board') }}><-목록으로</a></p>
-        ''', post=post, index=index)
+            <p><a href = "{{ url_for('board') }}">목록으로</a></p>
+        ''', post=post, index=index, comments=comments)
     return "글이 존재하지 않습니다.", 404
 
 
