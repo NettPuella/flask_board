@@ -175,7 +175,7 @@ def detail(index):
         post = posts[index]
         return render_template_string('''
             <h2>📝 {{ post.title }}</h2>
-            <!-- 🔹pre + white-space:pre-wrap 으로 줄바꿈/공박을 그대로 표시 -->
+            <!-- 🔹pre + white-space:pre-wrap 으로 줄바꿈/공백을 그대로 표시 -->
             <pre style="white-space: pre-wrap; font-family:inherit;">{{ post.content }}</pre>
                           
             <div style="display:flex; gap:10px; margin-top: 10px;">
@@ -192,10 +192,10 @@ def detail(index):
             <h3> 💬 댓글({{ post.comments|length if post.comments is disfined else 0 }}) </h3>
             <ul>
                 {% for c in post.coments %}
-                    <li style="margin-bottom:px;">
+                    <li style="margin-bottom:6px;">
                         <div>{{ c.text }}</div>
                         {% if c.created_at %}
-                            <small style="color:#888;">{{created_at}}</small>
+                            <small style="color:#888;">{{ c.created_at }}</small>
                         {% endif %}
                         <!-- 댓글 삭제 버튼(옵션) -->
                         <form method="post"
@@ -204,7 +204,7 @@ def detail(index):
                              onsubmit="return confirm('댓글을 삭제할까요?');">    
                             <button type="submit" style="border:none;background:none;color:#c00;cursor:pointer;">
                                 삭제
-                            </botton>               
+                            </button>               
                         </form>
                     </li>
                 < % else % >
@@ -264,14 +264,14 @@ def delete(index):
 # 💜 댓글; 추가 삭제 라우트
 @app.route('/comment/<int:index>', methods=['post'])
 def add_comment_route(index):
-    text = request.form.get('comment', ''),strip()
+    text = request.form.get('comment', '').strip()
     if text:
         add_comment(index, text)
     return redirect( url_for('detail', index=index))
 
 @app.route('/comment/<int:index>/delete/<int:cidx>', methods=['POST'])
-def delete_comment_route(index,cidx):
-    delete_comment(index,cidx)
+def delete_comment_route(index, cidx):
+    delete_comment(index, cidx)
     return redirect(url_for('detail', index=index))
 
 # 🖥️ 서버실행
