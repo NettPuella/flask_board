@@ -235,8 +235,8 @@ def edit(index):
         return "글이 존재하지 않습니다", 404
     
     if request.method == 'POST':
-        posts[index] ['title'] = request.form.get('title', '').strip()
-        posts[index]['content'] = request.form('conment', '')
+        posts[index]['title'] = request.form.get('title', '').strip()
+        posts[index]['content'] = request.form.get('content', '')
         save_all_posts(posts)
         return redirect(url_for('detail', index=index))
           
@@ -246,7 +246,7 @@ def edit(index):
     return render_template_string('''
         <h2>✏️ 글 수정</h2>
         <form method = "post">
-            제목: <input type="text" name="title" value="{{post.title}}" required><br><br>
+            제목: <input type="text" name="title" value="{{ post.title }}" required><br><br>
             내용: <br>
             <textarea name="content" rows="8" cols="70" required>{{ post.content }}</textarea><br>
             <button type="submit">수정 완료</button>
