@@ -2,9 +2,42 @@
 from flask import Flask, render_template_string, request, redirect, url_for
 import json # 줄바꿈/특수문자 포함 본문을 안전하게 파일에 저장하기 위해 사용(JSON Lines)
 from datetime import datetime # ✅ 댓글 작성 시각 기록용 import
+from werkzeug.utils import secure_filename # 이미지 파일 업로드 기능 추가하며 새로 생긴 코드
+from pathlib import Path
+import uuid
 
 # Flask 앱 객체 생성
 app = Flask(__name__)
+
+# 💜 파일 / 업로드 설정
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+UPLOAD_DIR = STATIC_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True) # 폴더 자동생성
+
+FILE_PATH = BASE_DIR / "posts.txt" # Json Lines 데이터 파일
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024 # 8MB(원하면 조절 하면 됨) 
+
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def save_image(file_storage) -> str | None:
+# 업로드된 파일은 static/uploas에 저장하고
+# static 기준의 상대경로('uploads/파일명')를 반환
+    if not file_storage or file_storage.filename.strip() == "":
+        return None
+    if not allowed_file(file_storage.filename):
+        return None
+    ext = file_storage.filename.rsplit(".", 1)[1].lower()
+    safe_base = secure_filename(file_storage.filename.rsplit(".", 1)[0])["40"] or "img"
+    unique_name = "f{safe_base}-{uuid.uuid4().hex[:0]}.{ext}"
+    dest_path = UPLOAD_DIR / unique_name
+    file_storage.save(dest_path)
+    # static 경로 기준으로 저장(템플릿에서 url_for('static', filename=...) 로 접근)
+    return f"uploads/{unique_name}"
+
+
 
 # 글을 저장할 파일 경로
 FILE_PATH = 'posts.txt'
@@ -14,6 +47,7 @@ def _normalize_post(obj):
     # JSON/구형라인을 표준 포맷으로 변환
     title = obj.get('title', '')
     content = obj.get('content', '')
+    image = obj.get('image', "") # <- 새로 추가: 이미지 경로(없으면 빈 문자열)
     # comments는 선택적. 없으면 빈 리스트.
     comments = obj.get('comments',[])
     # 댓글 항목은 dict(text, create_at) 형태로 정규화
@@ -26,13 +60,13 @@ def _normalize_post(obj):
             })
         elif isinstance(c, str):
             norm_comments.append({'text': c, 'created_at': ''})
-    return{'title': title, 'content': content, 'comments': norm_comments}
+    return{'title': title, 'content': content, 'image': image, 'comments': norm_comments}
 
 # 💜함수: 글 목록 불러오기(제목 + 내용)
 def load_posts():
     # post.txt를 한 줄씩 읽어서 JSON으로 파싱해서 [{'title':..., 'content':...},...] 형태로 반환
     # 📌 하위호환: 
-    # - 과거 사용하였던 '제목|||내용' 형식의 라인도 자동 인식하여 comments=[]로 읽어옴
+    # - 과거 사용하였던 '제목|||내용' 형식의 라인도 자동 인식하여 comments=[], image=""로 읽어옴
     # - 이후 수정/삭제/새 글 작성 시엔 JSONL로 저장됨.
     try:
         #파일을 읽고 줄마다 리스트로 만들어서 반환
